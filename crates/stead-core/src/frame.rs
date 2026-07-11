@@ -29,6 +29,17 @@ pub struct GeoRef {
     pub origin_utm: (f64, f64),
 }
 
+impl GeoRef {
+    pub fn load(path: &std::path::Path) -> crate::Result<Self> {
+        Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+    }
+
+    pub fn save(&self, path: &std::path::Path) -> crate::Result<()> {
+        std::fs::write(path, serde_json::to_string_pretty(self)?)?;
+        Ok(())
+    }
+}
+
 /// The site frame: georef plus indoor floor levels. Floors share the
 /// site's x/y; each floor pins a z datum (meters above origin ground).
 #[derive(Debug, Clone, Serialize, Deserialize)]

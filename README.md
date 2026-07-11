@@ -1,5 +1,8 @@
 # stead
 
+[![CI](https://github.com/l3ocifer/stead/actions/workflows/ci.yml/badge.svg)](https://github.com/l3ocifer/stead/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+
 **Whole-home localized mapping for open-source home automation.**
 
 Walk your property with a phone, and stead builds a live, semantically
@@ -81,14 +84,49 @@ system and makes location a first-class automation primitive.
 | `stead-server` | HTTP API, model/tile serving, live WebSocket |
 | `stead-cli` | `stead` command-line tool |
 
-## Quick start (development)
+## Try it in 60 seconds
 
 ```bash
-git clone https://github.com/l3ocifer/stead.git
-cd stead
-cargo build --workspace
-cargo run -p stead-cli -- --help
+git clone https://github.com/l3ocifer/stead.git && cd stead
+
+# 1. create a site anchored to real coordinates (UTM zone + origin)
+cargo run -p stead-cli -- init ~/sites/home --crs EPSG:26918 --origin 322500,4308000
+
+# 2. draw a zone and record an observation
+cargo run -p stead-cli -- zone-add ~/sites/home --name "Fire Pit" \
+    --kind event_space --polygon "40,40 50,40 50,50 40,50"
+cargo run -p stead-cli -- observe ~/sites/home \
+    --entity zone:fire_pit --attr temperature_f --value 74.5
+
+# 3. inspect — latest state with provenance, rebuilt from the journal
+cargo run -p stead-cli -- describe ~/sites/home
+cargo run -p stead-cli -- entities ~/sites/home
+
+# 4. serve the HTTP API
+STEAD_SITE_DIR=~/sites/home cargo run -p stead-server
 ```
+
+Then query it:
+
+```bash
+curl localhost:4180/api/site
+curl "localhost:4180/api/zones/locate?x=45&y=45"          # → Fire Pit
+
+# live sensor ingestion (stead.live.v1 — veil.live.v1 also accepted)
+curl -X POST localhost:4180/api/events -H 'content-type: application/json' -d '{
+  "schema": "stead.live.v1", "kind": "data",
+  "device_id": "soil-probe-1", "observed_at": "2026-07-11T02:00:00Z",
+  "data": {"soil_moisture_pct": 38.2}}'
+
+# spatial queries use one region grammar: all | bbox | within_m+point | polygon
+curl -X POST localhost:4180/api/query/features -H 'content-type: application/json' \
+  -d '{"region": {"within_m": 10, "point": {"x": 45, "y": 45}}}'
+```
+
+Everything you wrote is an append-only journal under
+`~/sites/home/journal/` — delete the process, restart, and the state
+replays identically. That journal is the system of record for your
+whole property. Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Deployment
 
@@ -98,12 +136,38 @@ live in [`deploy/`](deploy/).
 
 ## Roadmap
 
-- [ ] v0.1 — site model, zone CRUD, HA area sync, GLB serving
-- [ ] v0.2 — phone walkthrough import (ARKit/Polycam/WebODM artifacts)
-- [ ] v0.3 — MQTT sensor binding + zone climate envelopes
-- [ ] v0.4 — drone mission import (orthophoto + mesh georeferencing)
-- [ ] v0.5 — event-planning layer (temporary zones, power/lighting plans)
-- [ ] v1.0 — stable API, HACS-installable dashboard card
+**v0.1 (now)** — journal store with replay, zones/features/devices,
+region-grammar spatial queries, live event ingestion, CLI + HTTP API.
+
+- [ ] v0.2 — **HA bridge**: areas/floors sync into zones, zone-aware
+      aggregate sensors published back via MQTT discovery
+- [ ] v0.3 — **MQTT ingestion** + zone climate envelopes (per-zone
+      targets computed from whatever sensors fall inside, with
+      explicit sensor-coverage confidence — honest uncertainty)
+- [ ] v0.4 — **capture import**: ARKit/Polycam/Scaniverse and WebODM
+      artifacts (GLB/PLY) anchored to the site frame; auto-suggested
+      zone boundaries from room meshes
+- [ ] v0.5 — **MCP server**: the same region-grammar tools over
+      stdio/SSE so agents query the home like mazzap queries the land
+- [ ] v0.6 — **viewer**: serve GLB +
+      [floor3d-card](https://github.com/adizanni/floor3d-card)
+      bindings for HA dashboards; later a WASM in-browser viewer
+- [ ] v0.7 — **event-planning lens**: temporary zones with TTLs,
+      power-run and lighting-scene overlays
+- [ ] v0.8 — drone mission import (orthophoto + mesh georeferencing),
+      shared-frame interop with a mazzap land twin
+- [ ] v1.0 — stable API + contracts, `cargo install stead`,
+      single-container deploy, HACS card
+
+Performance track (as sites grow): state snapshots for O(1) startup,
+gzip journal sessions, R-tree zone index.
+
+## Contributing
+
+Issues and PRs are welcome on GitHub — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, the design rules that
+keep site data replayable forever, and the current high-value areas.
+Frozen public interfaces live in [`docs/contracts/`](docs/contracts/).
 
 ## Prior art & interop
 

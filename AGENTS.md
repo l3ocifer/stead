@@ -20,13 +20,13 @@ cargo fmt --all                  # format
 
 ## Map
 
-- `crates/stead-core` — site model: frames, zones, features, bindings, journal store
+- `crates/stead-core` — site model: frames, zones, features, bindings, journal store, `SiteState` replay, geometry + region grammar, deterministic IDs
 - `crates/stead-capture` — scan/walkthrough import (glTF, PLY, LAS)
-- `crates/stead-ingest` — live events (`stead.live.v1`), MQTT/HTTP adapters
+- `crates/stead-ingest` — live events (`stead.live.v1`), validation + observation conversion, MQTT/HTTP adapters
 - `crates/stead-ha` — Home Assistant two-way bridge
-- `crates/stead-server` — HTTP API + MCP surface
-- `crates/stead-cli` — `stead` binary
-- `docs/` — architecture, contracts, prior art
+- `crates/stead-server` — HTTP API (zones, features, entities, events, region queries) + future MCP surface
+- `crates/stead-cli` — `stead` binary (init/describe/observe/zone-add/entities)
+- `docs/` — architecture, frozen contracts (`docs/contracts/`), prior art
 
 ## Non-negotiable design rules
 
