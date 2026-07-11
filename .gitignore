@@ -1,0 +1,20 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Site data is private — real coordinates, scans, and imagery of a
+# specific home never belong in this repo (mazzap "Privacy" convention).
+/sites/
+*.gpkg
+georef.json
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem

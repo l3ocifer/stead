@@ -1,0 +1,29 @@
+# CODEOWNERS for stead
+#
+# Order matters: later patterns override earlier ones.
+# See https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Final-review gate (every PR) is enforced at the Forgejo branch-protection
+# layer (approvals_whitelist_username = ["vimes","vetinari"]). This file
+# routes path-specific code-owner reviews — see templates/docs/weco-mapping.md.
+
+# Default owner for everything in the repo (the WECO primary).
+*                                   @leo
+
+# CI / build / release infra — escalate to leo + vimes.
+/.github/                           @l3ocifer @vimes
+/.github/workflows/                 @l3ocifer @vimes
+/.forgejo/                          @l3ocifer @vimes
+/.forgejo/workflows/                @l3ocifer @vimes
+/Dockerfile*                        @l3ocifer @vimes
+/docker-compose*.yml                @l3ocifer @vimes
+/Makefile                           @l3ocifer @vimes
+
+# Agent contract — changing this changes how every agent behaves.
+/AGENTS.md                          @l3ocifer @vimes
+/CLAUDE.md                          @l3ocifer @vimes
+/CODEOWNERS                         @l3ocifer @vimes
+/.cursor/                           @l3ocifer @vimes
+
+# Sensitive paths (extended per-repo via sensitive_paths in repos.yaml).
+# (no extra sensitive paths declared)
