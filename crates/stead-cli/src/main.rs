@@ -1,3 +1,5 @@
+mod mcp;
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
@@ -62,9 +64,30 @@ enum Command {
         /// Boundary vertices as "x,y x,y x,y" (scene-local meters).
         #[arg(long)]
         polygon: String,
+        /// RFC 3339 UTC expiry for temporary zones (event lens).
+        #[arg(long)]
+        expires_at: Option<String>,
+    },
+    /// Register a relocalization anchor (QR, fiducial, VPS, …).
+    AnchorAdd {
+        path: PathBuf,
+        /// Anchor name; the id is derived (anchor:<slug>).
+        #[arg(long)]
+        name: String,
+        /// qr_code|fiducial|vps_lightship|arcore_geospatial|arkit_world|manual
+        #[arg(long, default_value = "qr_code")]
+        kind: String,
+        /// Position as "x,y" (scene-local meters).
+        #[arg(long)]
+        position: String,
+        /// JSON payload the positioning system needs.
+        #[arg(long, default_value = "{}")]
+        payload: String,
     },
     /// List entities with their latest attributes.
     Entities { path: PathBuf },
+    /// Serve MCP (stdio) over a site so agents can query it.
+    Mcp { path: PathBuf },
 }
 
 fn now() -> String {
@@ -101,6 +124,22 @@ fn parse_polygon(spec: &str) -> anyhow::Result<Vec<LocalPoint>> {
         bail!("polygon needs at least 3 vertices, got {}", points.len());
     }
     Ok(points)
+}
+
+fn anchor_kind(s: &str) -> anyhow::Result<stead_core::AnchorKind> {
+    use stead_core::AnchorKind::*;
+    Ok(match s {
+        "qr_code" => QrCode,
+        "fiducial" => Fiducial,
+        "vps_lightship" => VpsLightship,
+        "arcore_geospatial" => ArcoreGeospatial,
+        "arkit_world" => ArkitWorld,
+        "manual" => Manual,
+        other => bail!(
+            "unknown anchor kind {other:?}; accepted: qr_code, fiducial, \
+             vps_lightship, arcore_geospatial, arkit_world, manual"
+        ),
+    })
 }
 
 fn zone_kind(s: &str) -> anyhow::Result<ZoneKind> {
@@ -211,6 +250,7 @@ fn main() -> anyhow::Result<()> {
             kind,
             floor,
             polygon,
+            expires_at,
         } => {
             let zone = Zone {
                 id: stead_core::named_entity_id("zone", &name),
@@ -219,6 +259,7 @@ fn main() -> anyhow::Result<()> {
                 floor,
                 boundary: parse_polygon(&polygon)?,
                 tags: vec![],
+                expires_at,
             };
             let id = zone.id.clone();
             append(
@@ -227,6 +268,38 @@ fn main() -> anyhow::Result<()> {
                 &[JournalEvent::UpsertZone { zone, at: now() }],
             )?;
             println!("upserted {id}");
+        }
+        Command::AnchorAdd {
+            path,
+            name,
+            kind,
+            position,
+            payload,
+        } => {
+            let (x, y) = position
+                .split_once(',')
+                .context("--position must be \"x,y\"")?;
+            let anchor = stead_core::Anchor {
+                id: stead_core::named_entity_id("anchor", &name),
+                name: Some(name),
+                position: LocalPoint {
+                    x: x.trim().parse()?,
+                    y: y.trim().parse()?,
+                    z: 0.0,
+                },
+                kind: anchor_kind(&kind)?,
+                payload: serde_json::from_str(&payload).context("--payload must be JSON")?,
+            };
+            let id = anchor.id.clone();
+            append(
+                &path,
+                "cli-anchor",
+                &[JournalEvent::UpsertAnchor { anchor, at: now() }],
+            )?;
+            println!("upserted {id}");
+        }
+        Command::Mcp { path } => {
+            mcp::serve(&path)?;
         }
         Command::Entities { path } => {
             let state = SiteState::replay(&journal_dir(&path))?;

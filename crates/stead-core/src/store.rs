@@ -7,12 +7,13 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Entity, Feature, Observation, Zone};
+use crate::model::{Anchor, Entity, Feature, Observation, Zone};
 use crate::Result;
 
 /// Journal schema `stead.journal.v1` — see `docs/contracts/journal.md`.
-/// This is a frozen public contract: additions need a new variant and
-/// a contract-doc update; existing variants never change shape.
+/// This is a frozen public contract: new variants and *optional*
+/// fields (with serde defaults) may be added with a contract-doc
+/// update; existing fields never change shape or meaning.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum JournalEvent {
@@ -20,6 +21,7 @@ pub enum JournalEvent {
     RetireEntity { id: String, at: String },
     UpsertZone { zone: Zone, at: String },
     UpsertFeature { feature: Feature, at: String },
+    UpsertAnchor { anchor: Anchor, at: String },
     Observe(Observation),
 }
 

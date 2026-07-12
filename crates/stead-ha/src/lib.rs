@@ -6,6 +6,8 @@
 //! discovery (e.g. `sensor.stead_kitchen_temperature`, a service to
 //! actuate "all switches within N meters of a point").
 
+pub mod sync;
+
 use serde::{Deserialize, Serialize};
 
 /// Connection settings for the HA websocket + MQTT discovery paths.

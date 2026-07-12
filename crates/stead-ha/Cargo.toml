@@ -7,11 +7,21 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[[bin]]
+name = "stead-ha-sync"
+path = "src/bin/sync.rs"
+
 [dependencies]
 stead-core = { workspace = true }
+anyhow = { workspace = true }
+humantime = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 rumqttc = { workspace = true }
 tracing = { workspace = true }
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-native-roots"] }
+# pin the rustls crypto provider (tokio-tungstenite leaves it ambiguous)
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+futures-util = { version = "0.3.32", default-features = false, features = ["std", "sink"] }

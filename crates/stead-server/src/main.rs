@@ -116,6 +116,7 @@ struct LocateQuery {
 }
 
 /// GET /api/zones/locate?x=&y=[&floor=] — innermost zone at a point.
+/// Expired temporary zones (event lens) are skipped.
 async fn locate_zone(State(app): State<Arc<App>>, Query(q): Query<LocateQuery>) -> Json<Value> {
     let inner = app.inner.lock().await;
     let point = LocalPoint {
@@ -123,7 +124,25 @@ async fn locate_zone(State(app): State<Arc<App>>, Query(q): Query<LocateQuery>) 
         y: q.y,
         z: 0.0,
     };
-    Json(json!({"zone": inner.state.zone_at(point, q.floor.as_deref())}))
+    Json(json!({"zone": inner.state.zone_at(point, q.floor.as_deref(), Some(&now()))}))
+}
+
+async fn list_anchors(State(app): State<Arc<App>>) -> Json<Value> {
+    let inner = app.inner.lock().await;
+    Json(json!(inner.state.anchors().collect::<Vec<_>>()))
+}
+
+/// POST /api/anchors — register a relocalization anchor (journaled).
+async fn post_anchor(
+    State(app): State<Arc<App>>,
+    Json(anchor): Json<stead_core::Anchor>,
+) -> Result<Json<Value>, ApiError> {
+    let id = anchor.id.clone();
+    let mut inner = app.inner.lock().await;
+    inner
+        .write(JournalEvent::UpsertAnchor { anchor, at: now() })
+        .map_err(internal)?;
+    Ok(Json(json!({"upserted": id})))
 }
 
 /// POST /api/zones — upsert a zone (journaled).
@@ -213,12 +232,43 @@ async fn main() -> anyhow::Result<()> {
     let site_dir = PathBuf::from(std::env::var("STEAD_SITE_DIR").unwrap_or_else(|_| "site".into()));
     let app = Arc::new(open_site(&site_dir)?);
 
+    // Optional MQTT ingestion: set STEAD_MQTT_HOST (see stead-ingest
+    // docs) and every stead.live.v1 payload on the topic filter is
+    // journaled exactly like a POST /api/events.
+    if let Some(config) = stead_ingest::mqtt::MqttConfig::from_env() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<LiveEvent>(256);
+        tokio::spawn(stead_ingest::mqtt::run(config, tx));
+        let mqtt_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                let entity_id = event.entity_id();
+                let observations = event.into_observations();
+                let mut inner = mqtt_app.inner.lock().await;
+                if inner.state.entity(&entity_id).is_none() {
+                    let _ = inner.write(JournalEvent::UpsertEntity(stead_core::Entity {
+                        id: entity_id.clone(),
+                        kind: stead_core::EntityKind::Device,
+                        name: None,
+                        created_at: now(),
+                        retired_at: None,
+                    }));
+                }
+                for obs in observations {
+                    if let Err(err) = inner.write(JournalEvent::Observe(obs)) {
+                        tracing::error!(%err, "mqtt observation write failed");
+                    }
+                }
+            }
+        });
+    }
+
     let router = Router::new()
         .route("/healthz", get(health))
         .route("/api/site", get(site))
         .route("/api/zones", get(list_zones).post(post_zone))
         .route("/api/zones/locate", get(locate_zone))
         .route("/api/features", get(list_features))
+        .route("/api/anchors", get(list_anchors).post(post_anchor))
         .route("/api/entities", get(list_entities))
         .route("/api/entities/{id}", get(get_entity))
         .route("/api/events", post(post_event))

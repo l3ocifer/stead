@@ -7,8 +7,8 @@ future 3D tiles — is a derivation that can be deleted and rebuilt.
 ```
  phone scan ──▶ stead-capture ─┐
  drones ──────▶ stead-ingest ──┤   JournalEvent      ┌─▶ stead-ha (HA sync)
- sensors ─────▶ (LiveEvent) ───┼──▶ journal/*.jsonl ─┼─▶ stead-server (HTTP)
- CLI / API ───────────────────┘         │            └─▶ future: MCP, tiles
+ MQTT/sensors ▶ (LiveEvent) ───┼──▶ journal/*.jsonl ─┼─▶ stead-server (HTTP)
+ CLI / API ───────────────────┘         │            └─▶ stead mcp (agents)
                                         ▼
                                   SiteState (replay)
 ```
@@ -40,12 +40,20 @@ future 3D tiles — is a derivation that can be deleted and rebuilt.
 
 | Crate | Role | Status |
 |---|---|---|
-| `stead-core` | Site model: frames, zones, features, bindings; journal store; `SiteState` replay; geometry + region grammar; deterministic IDs | functional |
-| `stead-ingest` | `stead.live.v1` events (superset of `veil.live.v1`), validation, conversion to observations; MQTT adapter | events functional, MQTT next |
-| `stead-server` | HTTP API over a site (zones, features, entities, live events, region queries) | functional |
-| `stead-cli` | `stead init/describe/observe/zone-add/entities` | functional |
-| `stead-ha` | Home Assistant two-way sync (areas→zones, MQTT discovery back) | scaffold |
+| `stead-core` | Site model: frames, zones (incl. TTL), features, anchors, bindings; journal store; `SiteState` replay; geometry + region grammar; deterministic IDs | functional |
+| `stead-ingest` | `stead.live.v1` events (superset of `veil.live.v1`), validation, conversion to observations; MQTT subscription adapter | functional |
+| `stead-server` | HTTP API over a site (zones, features, anchors, entities, live events, region queries); optional MQTT ingest task | functional |
+| `stead-cli` | `stead init/describe/observe/zone-add/anchor-add/entities/mcp` — `mcp` serves the site to agents over stdio | functional |
+| `stead-ha` | Home Assistant sync: `stead-ha-sync` pulls areas/floors/entities into zone stubs + bound features (idempotent); MQTT discovery publish next | sync functional |
 | `stead-capture` | Scan/mesh import anchored to the site frame | scaffold |
+
+## Anchors
+
+Anchors are journaled relocalization points (QR, AprilTag, Lightship
+VPS, ARCore Geospatial, ARKit world, manual survey) — a position in
+the site frame plus an opaque payload owned by the positioning
+system. They are the interop seam for AR clients and robots; the
+longer arc is in [`VISION.md`](VISION.md).
 
 ## The region grammar
 

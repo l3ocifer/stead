@@ -26,8 +26,8 @@ pub use frame::{GeoRef, LocalPoint, SiteFrame};
 pub use geometry::{point_in_polygon, BBox, Region, RegionSpec};
 pub use id::{named_entity_id, positional_entity_id};
 pub use model::{
-    Binding, BindingKind, Entity, EntityId, EntityKind, Feature, Observation, Provenance, Zone,
-    ZoneKind,
+    Anchor, AnchorKind, Binding, BindingKind, Entity, EntityId, EntityKind, Feature, Observation,
+    Provenance, Zone, ZoneKind,
 };
 pub use state::{SiteState, SiteSummary};
 pub use store::{Journal, JournalEvent};

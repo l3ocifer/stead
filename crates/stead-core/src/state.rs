@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use crate::frame::LocalPoint;
 use crate::geometry::Region;
-use crate::model::{Entity, EntityId, EntityKind, Feature, Observation, Zone};
+use crate::model::{Anchor, Entity, EntityId, EntityKind, Feature, Observation, Zone};
 use crate::store::{Journal, JournalEvent};
 use crate::Result;
 
@@ -19,6 +19,7 @@ pub struct SiteState {
     entities: BTreeMap<EntityId, Entity>,
     zones: BTreeMap<EntityId, Zone>,
     features: BTreeMap<EntityId, Feature>,
+    anchors: BTreeMap<EntityId, Anchor>,
     /// Latest observation per (entity, attribute). Full history stays
     /// in the journal — history is a replay query, not archaeology.
     latest: BTreeMap<EntityId, BTreeMap<String, Observation>>,
@@ -31,6 +32,7 @@ pub struct SiteSummary {
     pub retired: usize,
     pub zones: usize,
     pub features: usize,
+    pub anchors: usize,
     pub observations: usize,
 }
 
@@ -75,6 +77,16 @@ impl SiteState {
                     retired_at: None,
                 });
                 self.features.insert(feature.id.clone(), feature.clone());
+            }
+            JournalEvent::UpsertAnchor { anchor, at } => {
+                self.upsert_entity(Entity {
+                    id: anchor.id.clone(),
+                    kind: EntityKind::Anchor,
+                    name: anchor.name.clone(),
+                    created_at: at.clone(),
+                    retired_at: None,
+                });
+                self.anchors.insert(anchor.id.clone(), anchor.clone());
             }
             JournalEvent::Observe(obs) => {
                 self.latest
@@ -123,6 +135,10 @@ impl SiteState {
         self.features.values().filter(|f| self.is_alive(&f.id))
     }
 
+    pub fn anchors(&self) -> impl Iterator<Item = &Anchor> {
+        self.anchors.values().filter(|a| self.is_alive(&a.id))
+    }
+
     /// Latest observation for one (entity, attribute).
     pub fn latest(&self, id: &str, attr: &str) -> Option<&Observation> {
         self.latest.get(id)?.get(attr)
@@ -135,10 +151,17 @@ impl SiteState {
 
     /// The innermost living zone containing a point. When `floor` is
     /// given, only zones on that floor match; otherwise any zone does.
-    /// "Innermost" = smallest bounding box, so a nested zone (a garden
-    /// bed inside the yard) wins over its container.
-    pub fn zone_at(&self, point: LocalPoint, floor: Option<&str>) -> Option<&Zone> {
+    /// When `now` (RFC 3339 UTC) is given, expired temporary zones are
+    /// skipped. "Innermost" = smallest bounding box, so a nested zone
+    /// (a garden bed inside the yard) wins over its container.
+    pub fn zone_at(
+        &self,
+        point: LocalPoint,
+        floor: Option<&str>,
+        now: Option<&str>,
+    ) -> Option<&Zone> {
         self.zones()
+            .filter(|z| now.is_none_or(|n| !z.is_expired(n)))
             .filter(|z| match (floor, z.floor.as_deref()) {
                 (Some(f), Some(zf)) => f == zf,
                 (Some(_), None) | (None, _) => floor.is_none(),
@@ -171,6 +194,7 @@ impl SiteState {
                 .count(),
             zones: self.zones.len(),
             features: self.features.len(),
+            anchors: self.anchors.len(),
             observations: self.observation_count,
         }
     }
@@ -194,6 +218,7 @@ mod tests {
                 floor: None,
                 boundary: ring,
                 tags: vec![],
+                expires_at: None,
             },
             at: "2026-07-11T00:00:00Z".into(),
         }
@@ -237,7 +262,7 @@ mod tests {
         }
 
         // innermost zone wins
-        let z = state.zone_at(p(45.0, 45.0), None).unwrap();
+        let z = state.zone_at(p(45.0, 45.0), None, None).unwrap();
         assert_eq!(z.id, "zone:fire_pit");
         // latest observation, not the first
         let obs = state.latest("zone:fire_pit", "temperature_f").unwrap();
@@ -266,7 +291,7 @@ mod tests {
             id: "zone:stage".into(),
             at: "2026-07-11T01:00:00Z".into(),
         });
-        assert!(state.zone_at(p(2.0, 2.0), None).is_none());
+        assert!(state.zone_at(p(2.0, 2.0), None, None).is_none());
         assert_eq!(state.summary().retired, 1);
         // reappearing un-retires the same identity
         state.apply(&zone(
@@ -274,7 +299,47 @@ mod tests {
             "Stage",
             vec![p(0.0, 0.0), p(5.0, 0.0), p(5.0, 5.0), p(0.0, 5.0)],
         ));
-        assert!(state.zone_at(p(2.0, 2.0), None).is_some());
+        assert!(state.zone_at(p(2.0, 2.0), None, None).is_some());
         assert_eq!(state.summary().retired, 0);
+    }
+
+    #[test]
+    fn temporary_zones_expire() {
+        let mut state = SiteState::default();
+        state.apply(&JournalEvent::UpsertZone {
+            zone: Zone {
+                id: "zone:party_stage".into(),
+                kind: crate::model::ZoneKind::EventSpace,
+                name: "Party stage".into(),
+                floor: None,
+                boundary: vec![p(0.0, 0.0), p(5.0, 0.0), p(5.0, 5.0), p(0.0, 5.0)],
+                tags: vec![],
+                expires_at: Some("2026-07-12T23:00:00Z".into()),
+            },
+            at: "2026-07-11T00:00:00Z".into(),
+        });
+        let during = Some("2026-07-12T20:00:00Z");
+        let after = Some("2026-07-13T09:00:00Z");
+        assert!(state.zone_at(p(2.0, 2.0), None, during).is_some());
+        assert!(state.zone_at(p(2.0, 2.0), None, after).is_none());
+        // without a time reference the zone still resolves
+        assert!(state.zone_at(p(2.0, 2.0), None, None).is_some());
+    }
+
+    #[test]
+    fn anchors_materialize() {
+        let mut state = SiteState::default();
+        state.apply(&JournalEvent::UpsertAnchor {
+            anchor: Anchor {
+                id: "anchor:front_door_qr".into(),
+                name: Some("Front door QR".into()),
+                position: p(0.0, 12.0),
+                kind: crate::model::AnchorKind::QrCode,
+                payload: serde_json::json!({"contents": "stead:site=home;anchor=front_door_qr"}),
+            },
+            at: "2026-07-12T00:00:00Z".into(),
+        });
+        assert_eq!(state.anchors().count(), 1);
+        assert_eq!(state.summary().anchors, 1);
     }
 }

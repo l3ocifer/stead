@@ -1,9 +1,15 @@
 # Contract: journal events (`stead.journal.v1`)
 
 **Frozen.** The journal is the system of record; anyone's site data
-must replay forever. Existing variants never change shape. New
-variants may be added (readers must ignore unknown `event` values
-gracefully or fail with a clear message), with a PR updating this doc.
+must replay forever. Existing fields never change shape or meaning.
+Two kinds of additions are allowed, each requiring a PR that updates
+this doc:
+
+1. New variants — readers must ignore unknown `event` values
+   gracefully or fail with a clear message.
+2. New *optional* fields on existing variants, with serde defaults,
+   so old journals (field absent) and old readers (field unknown)
+   both keep working.
 
 One event per line (JSONL), one file per write session under
 `<site>/journal/NNNNNN-<session>.jsonl`, ordered by filename.
@@ -27,10 +33,25 @@ Existing files are never modified.
   "position":{"x":45,"y":45,"z":0},"tags":["fan"],
   "bindings":[{"kind":"ha_entity","external_id":"switch.backyard_fan_3"}]}}
 
+{"event":"upsert_anchor","at":"2026-07-12T20:00:00Z","anchor":{
+  "id":"anchor:front_door_qr","name":"Front door QR",
+  "position":{"x":0,"y":12,"z":0},"kind":"qr_code",
+  "payload":{"contents":"stead:site=home;anchor=front_door_qr"}}}
+
 {"event":"observe","entity_id":"zone:fire_pit","attr":"temperature_f",
  "value":74.5,"provenance":{"source":"cli","run_id":null,
  "confidence":null,"observed_at":"2026-07-11T05:36:08Z"}}
 ```
+
+### Optional fields (added after v1 freeze)
+
+- `zone.expires_at` (RFC 3339 UTC, default absent) — temporary zones
+  for the event lens. Expired zones stop matching time-aware queries
+  (`zone_at` with a `now`) but replay and remain in the journal.
+- `upsert_anchor` variant — relocalization anchors (QR, fiducial,
+  Lightship VPS, ARCore Geospatial, ARKit world, manual). `payload`
+  is opaque to stead; it belongs to the positioning system named in
+  `kind`.
 
 ## Semantics
 

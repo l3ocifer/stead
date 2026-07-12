@@ -104,6 +104,18 @@ cargo run -p stead-cli -- entities ~/sites/home
 
 # 4. serve the HTTP API
 STEAD_SITE_DIR=~/sites/home cargo run -p stead-server
+
+# 5. (optional) let agents query the site over MCP (stdio)
+cargo run -p stead-cli -- mcp ~/sites/home
+```
+
+Have Home Assistant? Pull your whole registry in — areas become zone
+stubs, entities become features with bindings already wired:
+
+```bash
+HA_WS_URL=ws://homeassistant.local:8123/api/websocket \
+HA_TOKEN=<long-lived token> \
+STEAD_SITE_DIR=~/sites/home cargo run -p stead-ha --bin stead-ha-sync
 ```
 
 Then query it:
@@ -123,6 +135,11 @@ curl -X POST localhost:4180/api/query/features -H 'content-type: application/jso
   -d '{"region": {"within_m": 10, "point": {"x": 45, "y": 45}}}'
 ```
 
+Sensors can also stream in over MQTT — set `STEAD_MQTT_HOST` (and
+optionally `_PORT`/`_USERNAME`/`_PASSWORD`/`_TOPIC`) on the server and
+every `stead.live.v1` payload published to `stead/events/#` is
+journaled exactly like a POST.
+
 Everything you wrote is an append-only journal under
 `~/sites/home/journal/` — delete the process, restart, and the state
 replays identically. That journal is the system of record for your
@@ -137,27 +154,40 @@ live in [`deploy/`](deploy/).
 ## Roadmap
 
 **v0.1 (now)** — journal store with replay, zones/features/devices,
-region-grammar spatial queries, live event ingestion, CLI + HTTP API.
+region-grammar spatial queries, live event ingestion (HTTP + MQTT),
+relocalization anchors, TTL zones, HA registry sync, MCP server,
+CLI + HTTP API.
 
-- [ ] v0.2 — **HA bridge**: areas/floors sync into zones, zone-aware
-      aggregate sensors published back via MQTT discovery
-- [ ] v0.3 — **MQTT ingestion** + zone climate envelopes (per-zone
-      targets computed from whatever sensors fall inside, with
-      explicit sensor-coverage confidence — honest uncertainty)
+- [x] **HA bridge (sync half)**: `stead-ha-sync` pulls areas/floors/
+      entities into zone stubs + bound features, idempotently
+- [x] **MQTT ingestion**: `STEAD_MQTT_HOST` on the server journals
+      every `stead.live.v1` payload on `stead/events/#`
+- [x] **MCP server**: `stead mcp <site>` — region-grammar tools over
+      stdio so agents query the home like mazzap queries the land
+- [x] **Anchors**: QR/fiducial/Lightship/ARCore/ARKit relocalization
+      points as first-class journaled entities
+- [x] **TTL zones**: temporary event-lens zones that expire
+- [ ] v0.2 — HA bridge (publish half): zone-aware aggregate sensors
+      back into HA via MQTT discovery
+- [ ] v0.3 — zone climate envelopes (per-zone targets computed from
+      whatever sensors fall inside, with explicit sensor-coverage
+      confidence — honest uncertainty)
 - [ ] v0.4 — **capture import**: ARKit/Polycam/Scaniverse and WebODM
       artifacts (GLB/PLY) anchored to the site frame; auto-suggested
       zone boundaries from room meshes
-- [ ] v0.5 — **MCP server**: the same region-grammar tools over
-      stdio/SSE so agents query the home like mazzap queries the land
-- [ ] v0.6 — **viewer**: serve GLB +
+- [ ] v0.6 — **viewer + export**: glTF export with semantic sidecar,
       [floor3d-card](https://github.com/adizanni/floor3d-card)
       bindings for HA dashboards; later a WASM in-browser viewer
-- [ ] v0.7 — **event-planning lens**: temporary zones with TTLs,
-      power-run and lighting-scene overlays
+- [ ] v0.7 — **event-planning lens**: power-run and lighting-scene
+      overlays on TTL zones
 - [ ] v0.8 — drone mission import (orthophoto + mesh georeferencing),
       shared-frame interop with a mazzap land twin
 - [ ] v1.0 — stable API + contracts, `cargo install stead`,
       single-container deploy, HACS card
+
+Beyond v1.0 — AR overlays bound to anchors, Unity/Unreal live
+bridges, reality-linked gameplay, and federated overlay sharing:
+see [`docs/VISION.md`](docs/VISION.md).
 
 Performance track (as sites grow): state snapshots for O(1) startup,
 gzip journal sessions, R-tree zone index.

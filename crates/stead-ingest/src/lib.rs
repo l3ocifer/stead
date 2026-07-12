@@ -4,6 +4,8 @@
 //! mazzap/VEIL's `veil.live.v1` (see docs/prior-art-mazzap.md), so a
 //! Meshtastic/LoRa gateway or drone bridge can feed either system.
 
+pub mod mqtt;
+
 use serde::{Deserialize, Serialize};
 
 /// One live event from any source (sensor, tracker, drone, gateway).
