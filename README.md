@@ -189,6 +189,13 @@ Beyond v1.0 — AR overlays bound to anchors, Unity/Unreal live
 bridges, reality-linked gameplay, and federated overlay sharing:
 see [`docs/VISION.md`](docs/VISION.md).
 
+Sibling project: [firmament](https://github.com/l3ocifer/firmament) —
+the astronomically accurate night sky, rendered for ceiling
+projection. stead knows where your ceilings are and which projector
+serves each room; firmament knows what the sky above them looks like.
+A stead zone bound to a firmament render is the "sleep under the real
+stars, indoors" overlay.
+
 Performance track (as sites grow): state snapshots for O(1) startup,
 gzip journal sessions, R-tree zone index.
 
