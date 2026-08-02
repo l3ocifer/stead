@@ -196,6 +196,14 @@ serves each room; firmament knows what the sky above them looks like.
 A stead zone bound to a firmament render is the "sleep under the real
 stars, indoors" overlay.
 
+The binding is live as of firmament v0.3, and it's convention, not
+glue code: both sides meet in Home Assistant on the same MQTT broker.
+`stead-ha` syncs HA areas into zones; a firmament kiosk started with
+`--id <area>` (e.g. `--id bedroom`) discovers as a device in that
+same room, so zone presence, bedtime routines, and per-room skies
+compose with zero extra configuration — see firmament's
+[`docs/HOME_ASSISTANT.md`](https://github.com/l3ocifer/firmament/blob/main/docs/HOME_ASSISTANT.md).
+
 Performance track (as sites grow): state snapshots for O(1) startup,
 gzip journal sessions, R-tree zone index.
 
